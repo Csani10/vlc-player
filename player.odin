@@ -419,9 +419,9 @@ PlayerDraw :: proc(p: ^Player) {
 
         len_min := lenght / 1000 / 60
         len_sec := lenght / 1000 % 60
-        text := rl.TextFormat("%02d:%02d / %02d:%02d", minutes, seconds, len_min, len_sec)
-        text_size := rl.MeasureTextEx(p.font, text, 20, 0)
-        rl.DrawTextEx(p.font, text, rl.Vector2{20, f32(rl.GetScreenHeight())-20}, 20, 0, rl.WHITE)
+        time_text := rl.TextFormat("%02d:%02d / %02d:%02d", minutes, seconds, len_min, len_sec)
+        text_size := rl.MeasureTextEx(p.font, time_text, 20, 0)
+        rl.DrawTextEx(p.font, time_text, rl.Vector2{20, f32(rl.GetScreenHeight())-20}, 20, 0, rl.WHITE)
 
         rl.DrawRectangle(22 + c.int(text_size.x), rl.GetScreenHeight() - 18, c.int(f32(rl.GetScreenWidth() - 22 - c.int(text_size.x)) * percent), 16, rl.WHITE)
 
