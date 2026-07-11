@@ -445,7 +445,7 @@ PlayerDrawGui :: proc(p: ^Player) {
         }
         rl.DrawRectangleRounded(time_rec, 0.5, 8, rl.WHITE)
 
-        if lvlc.libvlc_media_player_is_playing(p.mp) == 1 {
+        if lvlc.libvlc_media_player_is_playing(p.mp) == 0 {
             v1 := rl.Vector2{2, f32(screen_size.height - 18)}
             v2 := rl.Vector2{2, f32(screen_size.height - 2)}
             v3 := rl.Vector2{18, f32(screen_size.height - 10)}
