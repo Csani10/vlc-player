@@ -32,7 +32,7 @@ main :: proc() {
 
         rl.BeginDrawing()
 
-        rl.ClearBackground(rl.Color{13, 13, 13, 255})
+        rl.ClearBackground(rl.BLACK)
 
         PlayerDraw(&player)
 
