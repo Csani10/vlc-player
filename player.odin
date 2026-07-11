@@ -1,5 +1,6 @@
 package main
 
+import "core:sys/darwin/CoreFoundation"
 import "core:path/filepath"
 import "core:time"
 import "core:strings"
@@ -62,21 +63,44 @@ display :: proc "c" (opaque: rawptr, picture: rawptr) {
     p.newFrame = true
 }
 
+screen_size_t :: struct {
+    width: c.int,
+    height: c.int
+}
+
+get_screen_size :: proc() -> screen_size_t {
+    return screen_size_t{
+        rl.GetScreenWidth(),
+        rl.GetScreenHeight()
+    }
+}
+
 PlayerShowStatusMsg :: proc(p: ^Player, message: cstring, priority: int = 0) {
     if priority < p.status_priority {
         return
     }
 
+    if p.status_message != nil {
+        delete(strings.clone_from_cstring(p.status_message))
+    }
+
+    p.status_message = strings.clone_to_cstring(
+        strings.clone_from_cstring(message),
+    )
+
     p.status_timer = 1
-    p.status_message = message
     p.status_priority = priority
 }
 
 PlayerInit :: proc(p: ^Player, filename: cstring) -> bool {
     mem.set(p, 0, size_of(Player))
 
+    p.status_message = ""
+    p.status_timer = 0
     p.gui_timer = 0
     p.angle = 0
+    p.last_vol = 0
+    p.stretch = false
 
     p.width = 1920
     p.height = 1080
@@ -138,6 +162,10 @@ PlayerInit :: proc(p: ^Player, filename: cstring) -> bool {
 
             time.sleep(10 * time.Millisecond)
         }
+
+        file_name := filepath.base(strings.clone_from_cstring(filename))
+
+        PlayerShowStatusMsg(p, rl.TextFormat("Playing: %s", strings.clone_to_cstring(file_name)), 1)
     }
 
     if p.video_width == 0 || p.video_height == 0 {
@@ -148,10 +176,6 @@ PlayerInit :: proc(p: ^Player, filename: cstring) -> bool {
     p.ready = true
 
     p.font = rl.LoadFontEx("./resources/iosevka.ttf", 36, nil, 0)
-
-    file_name := filepath.base(strings.clone_from_cstring(filename))
-
-    PlayerShowStatusMsg(p, rl.TextFormat("Playing: %s", strings.clone_to_cstring(file_name)), 1)
     
     return true
 }
@@ -316,24 +340,7 @@ PlayerUpdate :: proc(p: ^Player) {
     }
 }
 
-PlayerDraw :: proc(p: ^Player) {
-    time := lvlc.libvlc_media_player_get_time(p.mp)
-    lenght := lvlc.libvlc_media_player_get_length(p.mp)
-
-    /*dest := rl.Rectangle{
-        f32(rl.GetScreenWidth()) / 2,
-        f32(rl.GetScreenHeight()) / 2,
-        f32(rl.GetScreenWidth()),
-        f32(rl.GetScreenHeight()),
-    }
-
-    origin := rl.Vector2{
-        dest.width / 2,
-        dest.height / 2,
-    }
-
-    //rl.DrawTexturePro(p.texture, rl.Rectangle{0, 0, f32(p.width), f32(p.height)}, rl.Rectangle{0, 0, f32(rl.GetScreenWidth()), f32(rl.GetScreenHeight())}, rl.Vector2{f32(rl.GetScreenWidth()/2), f32(rl.GetScreenHeight()/2)}, 0, rl.WHITE)
-    rl.DrawTexturePro(p.texture, rl.Rectangle{0, 0, f32(p.width), f32(p.height)}, dest, origin, p.angle, rl.WHITE)*/
+PlayerDrawTexture :: proc(p: ^Player) {
     if !p.stretch {
         screen_w := f32(rl.GetScreenWidth())
         screen_h := f32(rl.GetScreenHeight())
@@ -390,54 +397,67 @@ PlayerDraw :: proc(p: ^Player) {
             dest.height / 2,
         }
 
-        //rl.DrawTexturePro(p.texture, rl.Rectangle{0, 0, f32(p.width), f32(p.height)}, rl.Rectangle{0, 0, f32(rl.GetScreenWidth()), f32(rl.GetScreenHeight())}, rl.Vector2{f32(rl.GetScreenWidth()/2), f32(rl.GetScreenHeight()/2)}, 0, rl.WHITE)
         rl.DrawTexturePro(p.texture, rl.Rectangle{0, 0, f32(p.width), f32(p.height)}, dest, origin, p.angle, rl.WHITE)
     }
+}
 
-    //rl.DrawText(rl.TextFormat("%d / %d", time, lenght), 10, 10, 24, rl.RED)
-
-    if p.status_timer > 0 {
-        text_size := rl.MeasureTextEx(p.font, p.status_message, 36, 0)
-
-        rl.DrawRectangleV(rl.Vector2{f32(rl.GetScreenWidth()) / 2 - text_size.x / 2, 30}, text_size, rl.ColorAlpha(rl.BLACK, 0.4))
-        rl.DrawTextEx(p.font, p.status_message, rl.Vector2{f32(rl.GetScreenWidth()) / 2 - text_size.x / 2, 30}, 36, 0, rl.WHITE)
-    }
+PlayerDrawGui :: proc(p: ^Player) {
+    screen_size := get_screen_size()
+    time := lvlc.libvlc_media_player_get_time(p.mp)
+    length := lvlc.libvlc_media_player_get_length(p.mp)
 
     if p.gui_timer > 0 {
         rl.ShowCursor()
+        percent := f32(time) / f32(length)
+
+        rl.DrawRectangle(0, screen_size.height - 20, screen_size.width, 20, rl.ColorAlpha(rl.BLACK, 0.4))
+        minutes := time / 1000 / 60
+        seconds := time / 1000 % 60
+
+        len_min := length / 1000 / 60
+        len_sec := length / 1000 % 60
+        time_text := rl.TextFormat("%02d:%02d / %02d:%02d", minutes, seconds, len_min, len_sec)
+        text_size := rl.MeasureTextEx(p.font, time_text, 20, 0)
+        rl.DrawTextEx(p.font, time_text, rl.Vector2{20, f32(screen_size.height)-20}, 20, 0, rl.WHITE)
+
+        time_rec := rl.Rectangle{
+            22 + text_size.x,
+            f32(screen_size.height) - 18,
+            f32(screen_size.width - 22 - c.int(text_size.x)) * percent,
+            16,
+        }
+        rl.DrawRectangleRounded(time_rec, 0.5, 8, rl.WHITE)
+
+        if lvlc.libvlc_media_player_is_playing(p.mp) == 1 {
+            v1 := rl.Vector2{2, f32(screen_size.height - 18)}
+            v2 := rl.Vector2{2, f32(screen_size.height - 2)}
+            v3 := rl.Vector2{18, f32(screen_size.height - 10)}
+            rl.DrawTriangle(v1, v2, v3, rl.WHITE)
+        } else {
+            rl.DrawRectangle(2, screen_size.height - 18, 5, 16, rl.WHITE)
+            rl.DrawRectangle(20 - 5 - 2, screen_size.height - 18, 5, 16, rl.WHITE)
+        }
     } else {
         rl.HideCursor()
     }
+}
 
-    if p.gui_timer > 0 {
-        percent := f32(time) / f32(lenght)
+PlayerDrawStatusMsg :: proc(p: ^Player) {
+    if p.status_timer > 0 {
+        text_size := rl.MeasureTextEx(p.font, p.status_message, 36, 0)
 
-        rl.DrawRectangle(0, rl.GetScreenHeight() - 20, rl.GetScreenWidth(), 20, rl.ColorAlpha(rl.BLACK, 0.4))
-        m_time := lvlc.libvlc_media_player_get_time(p.mp) / 1000
-        minutes := m_time / 60
-        seconds := m_time % 60
-
-        len_min := lenght / 1000 / 60
-        len_sec := lenght / 1000 % 60
-        time_text := rl.TextFormat("%02d:%02d / %02d:%02d", minutes, seconds, len_min, len_sec)
-        text_size := rl.MeasureTextEx(p.font, time_text, 20, 0)
-        rl.DrawTextEx(p.font, time_text, rl.Vector2{20, f32(rl.GetScreenHeight())-20}, 20, 0, rl.WHITE)
-
-        rl.DrawRectangle(22 + c.int(text_size.x), rl.GetScreenHeight() - 18, c.int(f32(rl.GetScreenWidth() - 22 - c.int(text_size.x)) * percent), 16, rl.WHITE)
-
-        playing := lvlc.libvlc_media_player_is_playing(p.mp) == 1
-
-        if playing {
-            v1 := rl.Vector2{2, f32(rl.GetScreenHeight())-18}
-            v2 := rl.Vector2{2, f32(rl.GetScreenHeight() - 2)}
-            v3 := rl.Vector2{18, f32(rl.GetScreenHeight())-10}
-            rl.DrawTriangle(v1, v2, v3, rl.WHITE)
-        } else {
-            rl.DrawRectangle(2, rl.GetScreenHeight() - 18, 5, 16, rl.WHITE)
-            rl.DrawRectangle(20 - 5 - 2, rl.GetScreenHeight() - 18, 5, 16, rl.WHITE)
+        rec := rl.Rectangle{
+            f32(rl.GetScreenWidth()) / 2 - text_size.x / 2 - 5, 
+            30 - 5,
+            text_size.x + 10,
+            text_size.y + 10,
         }
+        rl.DrawRectangleRounded(rec, 0.5, 8, rl.ColorAlpha(rl.BLACK, 0.4))
+        rl.DrawTextEx(p.font, p.status_message, rl.Vector2{f32(rl.GetScreenWidth()) / 2 - text_size.x / 2, 30}, 36, 0, rl.WHITE)
     }
+}
 
+PlayerDrawVolumeBar :: proc(p: ^Player) {
     vol := lvlc.libvlc_audio_get_volume(p.mp)
     vol_max := 100
 
@@ -459,20 +479,34 @@ PlayerDraw :: proc(p: ^Player) {
         bar_width := 15
         bar_height := rl.GetScreenHeight() - 60
 
-        filled_height := c.int(f32(bar_height) * vol_percent)
+        filled_height := f32(bar_height) * vol_percent
 
         x := rl.GetScreenWidth() - 30 - i32(bar_width)
-        y := rl.GetScreenHeight() - 30 - filled_height
+        y := rl.GetScreenHeight() - 30 - i32(filled_height)
 
-        rl.DrawRectangle(x, 30, i32(bar_width), bar_height, rl.ColorAlpha(rl.BLACK, 0.4))
+        bg_rec := rl.Rectangle{
+            f32(x) - 5,
+            30 - 5,
+            f32(bar_width) + 10,
+            f32(bar_height) + 10,
+        }
+        rl.DrawRectangleRounded(bg_rec, 0.5, 8, rl.ColorAlpha(rl.BLACK, 0.4))
 
         // volume level
-        rl.DrawRectangle(x, y, i32(bar_width), filled_height, color)
+        vol_rec := rl.Rectangle{
+            f32(x),
+            f32(y),
+            f32(bar_width),
+            f32(filled_height),
+        }
+        rl.DrawRectangleRounded(vol_rec, 0.5, 8, color)
 
         //rl.DrawTextEx(p.font, rl.TextFormat("Vol: %d%%", vol), rl.Vector2{30, 30}, 36, 0, color)
         //rl.DrawText(rl.TextFormat("Vol: %d%%", vol), 30, 30, 24, color)
     }
+}
 
+PlayerDrawHelpText :: proc(p: ^Player) {
     if p.show_help {
         help_message := strings.clone_to_cstring(`space - play, pause
 f - fullscreen toggle
@@ -481,7 +515,8 @@ left, right arrow - seek 5s
 e, q - adjust angle by 5 degrees
 s - toggle stretch
 drag n' drop - open a video or audio
-h - toggle help`)
+h - toggle help
+esc - quit`)
 
         help_message_size := rl.MeasureTextEx(p.font, help_message, 36, 0)
 
@@ -490,11 +525,18 @@ h - toggle help`)
             f32(rl.GetScreenHeight()) / 2 - help_message_size.y / 2,
         }
 
-        rl.DrawRectangleV(
+        bg_rec := rl.Rectangle{
+            pos.x - 5,
+            pos.y - 5,
+            help_message_size.x + 10,
+            help_message_size.y + 10,
+        }
+        rl.DrawRectangleRounded(bg_rec, 0.15, 8, rl.ColorAlpha(rl.BLACK, 0.4))
+        /*rl.DrawRectangleV(
             pos,
             help_message_size,
             rl.ColorAlpha(rl.BLACK, 0.4),
-        )
+        )*/
 
         rl.DrawTextEx(
             p.font,
@@ -505,6 +547,18 @@ h - toggle help`)
             rl.WHITE,
         )
     }
+}
+
+PlayerDraw :: proc(p: ^Player) {
+    PlayerDrawTexture(p)
+
+    PlayerDrawGui(p)
+
+    PlayerDrawStatusMsg(p)
+
+    PlayerDrawVolumeBar(p)
+
+    PlayerDrawHelpText(p)
 }
 
 PlayerDestroy :: proc(p: ^Player) {
