@@ -570,7 +570,6 @@ PlayerDraw :: proc(p: ^Player) {
     PlayerDrawVolumeBar(p)
 
     PlayerDrawHelpText(p)
-    rl.DrawTextEx(p.font, "⧸", rl.Vector2{100,100}, 36, 0, rl.WHITE)
 }
 
 PlayerDestroy :: proc(p: ^Player) {
