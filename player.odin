@@ -1,5 +1,6 @@
 package main
 
+import "core:os"
 import "core:sys/darwin/CoreFoundation"
 import "core:path/filepath"
 import "core:time"
@@ -107,6 +108,9 @@ PlayerInit :: proc(p: ^Player, filename: cstring) -> bool {
 
     p.pixels = make([]u8, int(p.width * p.height * 4))
 
+    app_dir := strings.clone_from_cstring(rl.GetApplicationDirectory())
+    os.chdir(app_dir)
+
     args := [4]cstring{
         "--avcodec-hw=any",
         "--no-osd",
@@ -176,7 +180,7 @@ PlayerInit :: proc(p: ^Player, filename: cstring) -> bool {
     p.ready = true
 
     p.font = rl.LoadFontEx("./resources/iosevka.ttf", 36, nil, 0)
-    
+
     return true
 }
 
@@ -566,6 +570,7 @@ PlayerDraw :: proc(p: ^Player) {
     PlayerDrawVolumeBar(p)
 
     PlayerDrawHelpText(p)
+    rl.DrawTextEx(p.font, "⧸", rl.Vector2{100,100}, 36, 0, rl.WHITE)
 }
 
 PlayerDestroy :: proc(p: ^Player) {
