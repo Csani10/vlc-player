@@ -181,6 +181,7 @@ PlayerInit :: proc(p: ^Player, filename: cstring) -> bool {
 }
 
 PlayerUpdate :: proc(p: ^Player) {
+    // handle timer countdowns
     if p.gui_timer > 0 {
         p.gui_timer -= rl.GetFrameTime()
     }
@@ -195,6 +196,7 @@ PlayerUpdate :: proc(p: ^Player) {
         p.volume_timer -= rl.GetFrameTime()
     }
 
+    // handle rotating
     if rl.IsKeyPressed(.E) || rl.IsKeyPressedRepeat(.E) {
         p.angle += 5
         PlayerShowStatusMsg(p, rl.TextFormat("Angle: %d", c.int(p.angle)))
@@ -205,6 +207,7 @@ PlayerUpdate :: proc(p: ^Player) {
         PlayerShowStatusMsg(p, rl.TextFormat("Angle: %d", c.int(p.angle)))
     }
 
+    // handle fullscreen change
     if rl.IsKeyPressed(.F) {
         if !rl.IsWindowFullscreen() {
             p.window_size.x = f32(rl.GetScreenWidth())
@@ -221,14 +224,17 @@ PlayerUpdate :: proc(p: ^Player) {
         rl.ToggleFullscreen()
     }
 
+    // handle help key
     if rl.IsKeyPressed(.H) {
         p.show_help = !p.show_help
     }
 
+    // check if video is not playing then make the gui visible
     if lvlc.libvlc_media_player_is_playing(p.mp) == 0 {
         p.gui_timer = 1
     }
 
+    // handle pause, unpause
     if rl.IsKeyPressed(.SPACE) {
         p.gui_timer = 1
 
@@ -241,18 +247,12 @@ PlayerUpdate :: proc(p: ^Player) {
         }
     }
 
+    // handle volume changing
     vol := lvlc.libvlc_audio_get_volume(p.mp)
     if (rl.IsKeyPressedRepeat(.UP) || rl.IsKeyPressed(.UP) || rl.GetMouseWheelMove() > 0) && vol + 5 <= 150 {
         lvlc.libvlc_audio_set_volume(p.mp, vol + 5)
-        p.volume_timer = 1
 
         PlayerShowStatusMsg(p, rl.TextFormat("Volume: %d%%", vol + 5))
-    }
-
-    if p.last_vol != vol {
-        p.volume_timer = 1
-        p.last_vol = vol
-        PlayerShowStatusMsg(p, rl.TextFormat("Volume: %d%%", vol))
     }
 
     if (rl.IsKeyPressedRepeat(.DOWN) || rl.IsKeyPressed(.DOWN) || rl.GetMouseWheelMove() < 0) && vol - 5 >= 0 {
@@ -262,6 +262,14 @@ PlayerUpdate :: proc(p: ^Player) {
         PlayerShowStatusMsg(p, rl.TextFormat("Volume: %d%%", vol - 5))
     }
 
+    // automatically make the volume bar visible when volume changed
+    if p.last_vol != vol {
+        p.volume_timer = 1
+        p.last_vol = vol
+        PlayerShowStatusMsg(p, rl.TextFormat("Volume: %d%%", vol))
+    }
+
+    // handle toggleing the stretch
     if rl.IsKeyPressed(.S) {
         p.stretch = !p.stretch
         if p.stretch {
@@ -271,15 +279,15 @@ PlayerUpdate :: proc(p: ^Player) {
         }
     }
 
+    // make the gui visible when the mouse moves
     m_delta := rl.GetMouseDelta()
-
     if m_delta.x != f32(0) || m_delta.y != f32(0) {
         p.gui_timer = 1
     }
 
-    m_time := lvlc.libvlc_media_player_get_time(p.mp)
-    
+    // handle seeking
     if lvlc.libvlc_media_player_is_seekable(p.mp) == 1 {
+        m_time := lvlc.libvlc_media_player_get_time(p.mp)
         if rl.IsKeyPressed(.LEFT) {
             if m_time - 5000 < 0 {
                 lvlc.libvlc_media_player_set_time(p.mp, 0)
@@ -299,11 +307,15 @@ PlayerUpdate :: proc(p: ^Player) {
         }
     }
 
+    // handle file dropping
     if rl.IsFileDropped() {
         files := rl.LoadDroppedFiles()
+
         lvlc.libvlc_media_player_stop(p.mp)
         lvlc.libvlc_media_release(p.m)
+
         file_name := filepath.base(strings.clone_from_cstring(files.paths[0]))
+
         p.m = lvlc.libvlc_media_new_path(p.vlc, files.paths[0])
         lvlc.libvlc_media_player_set_media(p.mp, p.m)
         lvlc.libvlc_media_player_play(p.mp)
@@ -329,6 +341,7 @@ PlayerUpdate :: proc(p: ^Player) {
         PlayerShowStatusMsg(p, rl.TextFormat("Playing: %s", strings.clone_to_cstring(file_name)), 1)
     }
 
+    // some rendering stuff
     if !p.ready {
         return
     }
@@ -499,10 +512,8 @@ PlayerDrawVolumeBar :: proc(p: ^Player) {
             f32(bar_width),
             f32(filled_height),
         }
-        rl.DrawRectangleRounded(vol_rec, 0.5, 8, color)
 
-        //rl.DrawTextEx(p.font, rl.TextFormat("Vol: %d%%", vol), rl.Vector2{30, 30}, 36, 0, color)
-        //rl.DrawText(rl.TextFormat("Vol: %d%%", vol), 30, 30, 24, color)
+        rl.DrawRectangleRounded(vol_rec, 0.5, 8, color)
     }
 }
 
@@ -531,12 +542,8 @@ esc - quit`)
             help_message_size.x + 10,
             help_message_size.y + 10,
         }
+
         rl.DrawRectangleRounded(bg_rec, 0.15, 8, rl.ColorAlpha(rl.BLACK, 0.4))
-        /*rl.DrawRectangleV(
-            pos,
-            help_message_size,
-            rl.ColorAlpha(rl.BLACK, 0.4),
-        )*/
 
         rl.DrawTextEx(
             p.font,
