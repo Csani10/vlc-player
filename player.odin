@@ -292,7 +292,7 @@ PlayerUpdate :: proc(p: ^Player) {
     // handle seeking
     if lvlc.libvlc_media_player_is_seekable(p.mp) == 1 {
         m_time := lvlc.libvlc_media_player_get_time(p.mp)
-        if rl.IsKeyPressed(.LEFT) {
+        if rl.IsKeyPressed(.LEFT) || rl.IsKeyPressedRepeat(.LEFT) {
             if m_time - 5000 < 0 {
                 lvlc.libvlc_media_player_set_time(p.mp, 0)
             } else {
@@ -303,7 +303,7 @@ PlayerUpdate :: proc(p: ^Player) {
             PlayerShowStatusMsg(p, "-5s")
         }
 
-        if rl.IsKeyPressed(.RIGHT) {
+        if rl.IsKeyPressed(.RIGHT) || rl.IsKeyPressedRepeat(.RIGHT) {
             lvlc.libvlc_media_player_set_time(p.mp, m_time + 5000)
             p.gui_timer = 1
 
